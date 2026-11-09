@@ -87,54 +87,36 @@ async def cache_invalidation_listener():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup
     logger.info("Starting up...")
+
+    # Initialize PostgreSQL database pool
+    from .core.database_pool import db_pool
+
+    await db_pool.initialize()
+    logger.info("Database pool initialized")
 
     # Initialize Supabase connection pool
     try:
         from .core.supabase_connection_pool import supabase_pool
 
         await supabase_pool.initialize()
-        logger.info("✅ Supabase connection pool initialized")
+        logger.info("Supabase connection pool initialized")
+
     except Exception as e:
-        logger.error(f"❌ Supabase connection pool initialization failed: {e}")
-        # Continue startup - fallback to direct connections
+        logger.warning(f"Supabase pool initialization failed: {e}")
 
-    # Initialize Redis connection with timeout
-    try:
-        await redis_client.initialize()
-    except Exception as e:
-        logger.warning(f"Redis initialization warning: {e}")
-        # Continue without Redis - will use fallback
-
-    # Start cache invalidation listener (only if Redis is connected)
-    if redis_client.is_connected:
-        asyncio.create_task(cache_invalidation_listener())
-        logger.info("🔄 Cache invalidation listener task created")
-    else:
-        logger.info("ℹ️ Redis not connected - cache invalidation will work locally only (single worker mode)")
-
-    # Start async processor background cleanup
+    # Start background cleanup
     from .core.async_processing import async_processor
+
     async_processor.start_background_cleanup()
     logger.info("Async processor background cleanup started")
 
     yield
+
     # Shutdown
     logger.info("Shutting down...")
 
-    # Shutdown async processor
-    await async_processor.shutdown()
-    logger.info("Async processor shutdown completed")
-
-    # Close connection pool
-    try:
-        from .core.supabase_connection_pool import supabase_pool
-
-        await supabase_pool.close()
-        logger.info("✅ Supabase connection pool closed")
-    except Exception as e:
-        logger.warning(f"⚠️ Error closing connection pool: {e}")
+    await db_pool.close()
 
 
 app = FastAPI(

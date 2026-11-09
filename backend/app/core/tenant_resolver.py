@@ -89,7 +89,7 @@ class TenantResolver:
             return "tenant-a"
             
         # Default fallback
-        return "tenant-a"
+        return None
 
     @staticmethod
     async def update_user_tenant_metadata(user_id: str, tenant_id: str) -> None:
